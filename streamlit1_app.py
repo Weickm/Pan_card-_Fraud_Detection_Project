@@ -22,6 +22,7 @@ def highlight_tampered_sections(reference, test, diff):
     kernel = np.ones((3,3), np.uint8)
     thresh = cv2.morphologyEx(thresh, cv2.MORPH_OPEN, kernel)
     contours, _ = cv2.findContours(thresh, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    
     result_image = cv2.cvtColor(test, cv2.COLOR_GRAY2BGR)
     tampered_areas = []
     
@@ -34,12 +35,12 @@ def highlight_tampered_sections(reference, test, diff):
     return result_image, tampered_areas
 
 # Streamlit UI
-st.title("PAN Card Tampering Detection App")
+st.title("🔍 PAN Card Tampering Detection App")
 st.write("Upload an original PAN card image and test images to check for tampering section-wise.")
 
 # Upload Reference PAN Card
-reference_file = st.file_uploader("Upload Original PAN Card", type=["png", "jpg", "jpeg"])
-test_files = st.file_uploader("Upload Test PAN Cards", type=["png", "jpg", "jpeg"], accept_multiple_files=True)
+reference_file = st.file_uploader("📤 Upload Original PAN Card", type=["png", "jpg", "jpeg"])
+test_files = st.file_uploader("📤 Upload Test PAN Cards", type=["png", "jpg", "jpeg"], accept_multiple_files=True)
 
 if reference_file and test_files:
     reference_image = preprocess_image(reference_file)
@@ -50,45 +51,37 @@ if reference_file and test_files:
         score, diff = compare_images(reference_image, test_image)
         result_image, tampered_areas = highlight_tampered_sections(reference_image, test_image, diff)
 
-        # Analyzing tampered sections
-        tampered_sections = []
+        # Using a set to avoid duplicate statements
+        tampered_sections_set = set()
+
         for (x, y, w, h) in tampered_areas:
             if 30 < x < 200 and 10 < y < 70:
-                tampered_sections.append("❌ PAN Number is tampered.")
+                tampered_sections_set.add("❌ PAN Number is tampered.")
             elif 210 < x < 370 and 10 < y < 70:
-                tampered_sections.append("❌ Candidate Name is tampered.")
+                tampered_sections_set.add("❌ Candidate Name is tampered.")
             elif 30 < x < 200 and 80 < y < 130:
-                tampered_sections.append("❌ Father's/Mother's Name is tampered.")
+                tampered_sections_set.add("❌ Father's/Mother's Name is tampered.")
             elif 30 < x < 160 and 140 < y < 210:
-                tampered_sections.append("❌ Photo is tampered.")
+                tampered_sections_set.add("❌ Photo is tampered.")
             elif 260 < x < 390 and 140 < y < 210:
-                tampered_sections.append("❌ QR Code is tampered.")
+                tampered_sections_set.add("❌ QR Code is tampered.")
             elif 130 < x < 270 and 210 < y < 250:
-                tampered_sections.append("❌ Signature is tampered.")
+                tampered_sections_set.add("❌ Signature is tampered.")
 
-        overall_result = "✅ Valid PAN Card" if score >= 0.7 and not tampered_sections else "❌ Fake PAN Card"
-        
-        # Store the results for this test image
-        results.append({
-            'test_name': test_file.name,
-            'result_image': result_image,
-            'score': score,
-            'overall_result': overall_result,
-            'tampered_sections': tampered_sections
-        })
+        overall_result = "✅ Valid PAN Card" if score >= 0.7 and not tampered_sections_set else "❌ Fake PAN Card"
+        results.append((test_file.name, result_image, score, overall_result, tampered_sections_set))
     
-    # Display all results after processing all test images
-    for result in results:
-        st.image(result['result_image'], caption=f"🔍 Tampered Sections Highlighted ({result['test_name']})", use_column_width=True)
-        st.write(f"📊 *SSIM Score:* {result['score']:.4f}")
-        st.write(f"🔍 *Overall Result:* {result['overall_result']}")
-        
-        if result['tampered_sections']:
-            st.write("📌 *Tampered Sections:* ")
-            for section in result['tampered_sections']:
+    # Displaying results
+    for test_name, result_image, score, overall_result, tampered_sections_set in results:
+        st.image(result_image, caption=f"🔍 Tampered Sections Highlighted ({test_name})", use_container_width=True)
+        st.write(f"📊 *SSIM Score:* {score:.4f}")
+        st.write(f"🔍 *Overall Result:* {overall_result}")
+
+        if tampered_sections_set:
+            st.write("📌 *Tampered Sections:*")
+            for section in tampered_sections_set:
                 st.write(section)
         else:
             st.write("✅ No tampering detected.")
-        
-        st.write("---")
 
+        st.write("---")
