@@ -67,18 +67,28 @@ if reference_file and test_files:
                 tampered_sections.append("❌ Signature is tampered.")
 
         overall_result = "✅ Valid PAN Card" if score >= 0.7 and not tampered_sections else "❌ Fake PAN Card"
-        results.append((test_file.name, result_image, score, overall_result, tampered_sections))
-    
-    for test_name, result_image, score, overall_result, tampered_sections in results:
-        st.image(result_image, caption=f"🔍 Tampered Sections Highlighted ({test_name})", use_column_width=True)
-        st.write(f"📊 *SSIM Score:* {score:.4f}")
-        st.write(f"🔍 *Overall Result:* {overall_result}")
         
-        if tampered_sections:
+        # Store the results for this test image
+        results.append({
+            'test_name': test_file.name,
+            'result_image': result_image,
+            'score': score,
+            'overall_result': overall_result,
+            'tampered_sections': tampered_sections
+        })
+    
+    # Display all results after processing all test images
+    for result in results:
+        st.image(result['result_image'], caption=f"🔍 Tampered Sections Highlighted ({result['test_name']})", use_column_width=True)
+        st.write(f"📊 *SSIM Score:* {result['score']:.4f}")
+        st.write(f"🔍 *Overall Result:* {result['overall_result']}")
+        
+        if result['tampered_sections']:
             st.write("📌 *Tampered Sections:* ")
-            for section in tampered_sections:
+            for section in result['tampered_sections']:
                 st.write(section)
         else:
             st.write("✅ No tampering detected.")
         
         st.write("---")
+
