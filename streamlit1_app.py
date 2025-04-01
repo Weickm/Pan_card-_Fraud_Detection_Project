@@ -62,7 +62,7 @@ if reference_file and test_files:
             elif 150 < x < 250 and 180 < y < 200:
                 tampered_sections.append("❌ Signature is tampered.")
 
-        overall_result = "❌ Fake PAN Card" if tampered_sections else "✅ Valid PAN Card"
+        overall_result = "✅ Valid PAN Card" if score >= 0.7 and not tampered_sections else "❌ Fake PAN Card"
         
         st.image(result_image, caption=f"🔍 Tampered Sections Highlighted ({test_file.name})", use_column_width=True)
         st.write(f"📊 *SSIM Score:* {score:.4f}")
@@ -76,4 +76,3 @@ if reference_file and test_files:
             st.write("✅ No tampering detected.")
         
         st.write("---")
-
