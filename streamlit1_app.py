@@ -6,7 +6,7 @@ from skimage.metrics import structural_similarity as ssim
 # Load and preprocess images
 def preprocess_image(image):
     image = cv2.imdecode(np.frombuffer(image.read(), np.uint8), cv2.IMREAD_GRAYSCALE)
-    image = cv2.resize(image, (400, 200))
+    image = cv2.resize(image, (400, 250))
     return image
 
 # Compare two images using SSIM
@@ -17,13 +17,16 @@ def compare_images(image1, image2):
 
 # Detect and highlight tampered regions
 def highlight_tampered_sections(reference, test, diff):
-    _, thresh = cv2.threshold(diff, 50, 255, cv2.THRESH_BINARY)
+    thresh = cv2.adaptiveThreshold(diff, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, 
+                                   cv2.THRESH_BINARY, 11, 2)
+    kernel = np.ones((3,3), np.uint8)
+    thresh = cv2.morphologyEx(thresh, cv2.MORPH_OPEN, kernel)
     contours, _ = cv2.findContours(thresh, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
     result_image = cv2.cvtColor(test, cv2.COLOR_GRAY2BGR)
     tampered_areas = []
     
     for contour in contours:
-        if cv2.contourArea(contour) > 50:
+        if cv2.contourArea(contour) > 50:  # Reduced area threshold for better detection
             x, y, w, h = cv2.boundingRect(contour)
             cv2.rectangle(result_image, (x, y), (x + w, y + h), (0, 0, 255), 2)
             tampered_areas.append((x, y, w, h))
@@ -49,17 +52,17 @@ if reference_file and test_files:
         # Analyzing tampered sections
         tampered_sections = []
         for (x, y, w, h) in tampered_areas:
-            if 50 < x < 150 and 20 < y < 60:
+            if 30 < x < 200 and 10 < y < 70:
                 tampered_sections.append("❌ PAN Number is tampered.")
-            elif 160 < x < 300 and 20 < y < 60:
+            elif 210 < x < 370 and 10 < y < 70:
                 tampered_sections.append("❌ Candidate Name is tampered.")
-            elif 50 < x < 150 and 70 < y < 110:
+            elif 30 < x < 200 and 80 < y < 130:
                 tampered_sections.append("❌ Father's/Mother's Name is tampered.")
-            elif 50 < x < 120 and 120 < y < 180:
+            elif 30 < x < 160 and 140 < y < 210:
                 tampered_sections.append("❌ Photo is tampered.")
-            elif 280 < x < 380 and 130 < y < 180:
+            elif 260 < x < 390 and 140 < y < 210:
                 tampered_sections.append("❌ QR Code is tampered.")
-            elif 150 < x < 250 and 180 < y < 200:
+            elif 130 < x < 270 and 210 < y < 250:
                 tampered_sections.append("❌ Signature is tampered.")
 
         overall_result = "✅ Valid PAN Card" if score >= 0.7 and not tampered_sections else "❌ Fake PAN Card"
