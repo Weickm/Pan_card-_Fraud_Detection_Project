@@ -9,8 +9,6 @@ Original file is located at
 
 
 
-
-
 import streamlit as st
 import cv2
 import numpy as np
@@ -28,46 +26,52 @@ def compare_images(image1, image2):
     diff = (diff * 255).astype("uint8")
     return score, diff
 
-# Detect tampered regions and draw red bounding boxes
-def highlight_tampered_regions(reference, test, diff):
+# Detect and highlight tampered regions in different sections
+def highlight_tampered_sections(reference, test, diff, section_name):
     _, thresh = cv2.threshold(diff, 50, 255, cv2.THRESH_BINARY)
     contours, _ = cv2.findContours(thresh, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-
     result_image = cv2.cvtColor(test, cv2.COLOR_GRAY2BGR)
+    
+    tampered = False
     for contour in contours:
-        if cv2.contourArea(contour) > 50:  # Filter small noises
+        if cv2.contourArea(contour) > 50:
             x, y, w, h = cv2.boundingRect(contour)
             cv2.rectangle(result_image, (x, y), (x + w, y + h), (0, 0, 255), 2)
-
-    return result_image
+            tampered = True
+    
+    return result_image, tampered
 
 # Streamlit UI
 st.title("PAN Card Tampering Detection App")
-st.write("Upload an original PAN card image and test images to check for tampering.")
+st.write("Upload an original PAN card image and test images to check for tampering section-wise.")
 
 # Upload Reference PAN Card
 reference_file = st.file_uploader("Upload Original PAN Card", type=["png", "jpg", "jpeg"])
 test_files = st.file_uploader("Upload Test PAN Cards", type=["png", "jpg", "jpeg"], accept_multiple_files=True)
 
+sections = ["PAN Number", "Candidate Name", "Father's/Mother's Name", "Photo", "QR Code", "Signature"]
+
 if reference_file and test_files:
     reference_image = preprocess_image(reference_file)
-
+    
     for test_file in test_files:
         test_image = preprocess_image(test_file)
         score, diff = compare_images(reference_image, test_image)
-        result_image = highlight_tampered_regions(reference_image, test_image, diff)
+        
+        results = []
+        for section in sections:
+            result_image, tampered = highlight_tampered_sections(reference_image, test_image, diff, section)
+            if tampered:
+                results.append(f"❌ {section} is tampered.")
+            else:
+                results.append(f"✅ {section} is intact.")
 
-        is_fake = score < 0.75  # Threshold for fake detection
-        result = "✅ Valid PAN Card" if not is_fake else "❌ Fake PAN Card"
-        reason = (
-            "✅ High similarity score and minimal structural differences."
-            if result == "✅ Valid PAN Card"
-            else "❌ Major structural differences detected. Possible fake document."
-        )
-
-        st.image(result_image, caption=f"🔍 Tampered Areas Highlighted ({test_file.name})", use_column_width=True)
+        overall_result = "❌ Fake PAN Card" if any("❌" in r for r in results) else "✅ Valid PAN Card"
+        
+        st.image(result_image, caption=f"🔍 Tampered Sections Highlighted ({test_file.name})", use_column_width=True)
         st.write(f"📊 *SSIM Score:* {score:.4f}")
-        st.write(f"🔍 *Result:* {result}")
-        st.write(f"📌 *Reason:* {reason}")
+        st.write(f"🔍 *Overall Result:* {overall_result}")
+        st.write("📌 *Section-wise analysis:*")
+        for res in results:
+            st.write(res)
         st.write("---")
-
