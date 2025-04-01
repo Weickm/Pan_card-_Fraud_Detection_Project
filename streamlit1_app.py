@@ -43,6 +43,7 @@ test_files = st.file_uploader("Upload Test PAN Cards", type=["png", "jpg", "jpeg
 
 if reference_file and test_files:
     reference_image = preprocess_image(reference_file)
+    results = []
     
     for test_file in test_files:
         test_image = preprocess_image(test_file)
@@ -66,8 +67,10 @@ if reference_file and test_files:
                 tampered_sections.append("❌ Signature is tampered.")
 
         overall_result = "✅ Valid PAN Card" if score >= 0.7 and not tampered_sections else "❌ Fake PAN Card"
-        
-        st.image(result_image, caption=f"🔍 Tampered Sections Highlighted ({test_file.name})", use_column_width=True)
+        results.append((test_file.name, result_image, score, overall_result, tampered_sections))
+    
+    for test_name, result_image, score, overall_result, tampered_sections in results:
+        st.image(result_image, caption=f"🔍 Tampered Sections Highlighted ({test_name})", use_column_width=True)
         st.write(f"📊 *SSIM Score:* {score:.4f}")
         st.write(f"🔍 *Overall Result:* {overall_result}")
         
