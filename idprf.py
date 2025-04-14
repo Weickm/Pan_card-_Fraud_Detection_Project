@@ -11,13 +11,13 @@ def preprocess_image(image_file):
     image = cv2.resize(image, (400, 250))
     return image
 
-# Compare two images and compute SSIM & difference
+# Compute SSIM difference
 def compute_ssim_diff(img1, img2):
-    score, diff = ssim(img1, img2, full=True)
+    _, diff = ssim(img1, img2, full=True)
     diff = (diff * 255).astype("uint8")
-    return score, diff
+    return diff
 
-# Highlight differences visually using contours
+# Extract tampered regions using contours
 def extract_tampered_regions(diff):
     thresh = cv2.adaptiveThreshold(diff, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C,
                                    cv2.THRESH_BINARY_INV, 11, 2)
@@ -28,13 +28,13 @@ def extract_tampered_regions(diff):
     mask = np.zeros_like(diff)
     regions = []
     for c in contours:
-        if cv2.contourArea(c) > 40:  # Ignore small noise
+        if cv2.contourArea(c) > 40:
             x, y, w, h = cv2.boundingRect(c)
             cv2.rectangle(mask, (x, y), (x + w, y + h), 255, -1)
             regions.append((x, y, w, h))
     return mask, regions
 
-# Define fixed regions in PAN card (coordinates based on 400x250 resize)
+# Field regions
 regions_def = {
     "PAN Number": (80, 35, 230, 60),
     "Candidate Name": (35, 75, 200, 100),
@@ -46,23 +46,21 @@ regions_def = {
     "Reference Number": (260, 215, 390, 250)
 }
 
-# Compare cropped fields individually for more precise tampering detection
-def analyze_regions(ref_img, test_img):
-    tampered_fields = []
-    for label, (x1, y1, x2, y2) in regions_def.items():
-        ref_crop = ref_img[y1:y2, x1:x2]
-        test_crop = test_img[y1:y2, x1:x2]
-        score, _ = compute_ssim_diff(ref_crop, test_crop)
-        if score < 0.90:  # Customize threshold for tampering
-            tampered_fields.append((label, score))
+# Check if tampered regions overlap with known fields
+def detect_tampered_fields(tampered_regions):
+    tampered_fields = set()
+    for (x, y, w, h) in tampered_regions:
+        cx, cy = x + w // 2, y + h // 2
+        for label, (x1, y1, x2, y2) in regions_def.items():
+            if x1 <= cx <= x2 and y1 <= cy <= y2:
+                tampered_fields.add(label)
     return tampered_fields
 
 # Streamlit App
 st.set_page_config("PAN Card Tampering Detector", layout="centered")
-st.title("🛡️ PAN Card Tampering Detection Tool")
-st.write("Upload the original PAN card and one or more suspect images to detect tampering.")
+st.title("🔍 PAN Card Tampering Detection (Clean Output)")
+st.write("Upload the original and one or more suspected PAN card images.")
 
-# Upload files
 ref_file = st.file_uploader("Upload ORIGINAL PAN Card", type=["jpg", "jpeg", "png"])
 test_files = st.file_uploader("Upload SUSPECT PAN Card(s)", type=["jpg", "jpeg", "png"], accept_multiple_files=True)
 
@@ -73,36 +71,30 @@ if ref_file and test_files:
         st.subheader(f"Results for: {test_file.name}")
         test_img = preprocess_image(test_file)
 
-        # Global SSIM and Difference
-        global_score, global_diff = compute_ssim_diff(ref_img, test_img)
-        mask, tampered_regions = extract_tampered_regions(global_diff)
+        diff = compute_ssim_diff(ref_img, test_img)
+        mask, tampered_regions = extract_tampered_regions(diff)
+        detected_fields = detect_tampered_fields(tampered_regions)
 
-        # Overlay mask on test image
-        result_overlay = cv2.cvtColor(test_img, cv2.COLOR_GRAY2BGR)
+        # Overlay tampered areas
+        overlay = cv2.cvtColor(test_img, cv2.COLOR_GRAY2BGR)
         for x, y, w, h in tampered_regions:
-            cv2.rectangle(result_overlay, (x, y), (x + w, y + h), (0, 0, 255), 2)
+            cv2.rectangle(overlay, (x, y), (x + w, y + h), (0, 0, 255), 2)
 
-        # Region-wise tampering detection
-        tampered_fields = analyze_regions(ref_img, test_img)
-
-        # Display Images
+        # Display
         col1, col2 = st.columns(2)
         with col1:
-            st.image(ref_img, caption="Original PAN (Preprocessed)", channels="GRAY", use_container_width=True)
+            st.image(ref_img, caption="Original PAN", channels="GRAY", use_container_width=True)
         with col2:
-            st.image(test_img, caption="Test PAN (Preprocessed)", channels="GRAY", use_container_width=True)
+            st.image(test_img, caption="Suspect PAN", channels="GRAY", use_container_width=True)
 
-        st.image(global_diff, caption="SSIM Difference Image", channels="GRAY", use_container_width=True)
-        st.image(mask, caption="Detected Change Mask", channels="GRAY", use_container_width=True)
-        st.image(result_overlay, caption="Detected Tampered Areas", use_container_width=True)
+        st.image(mask, caption="Tampered Region Mask", channels="GRAY", use_container_width=True)
+        st.image(overlay, caption="Tampered Areas Highlighted", use_container_width=True)
 
-        # Output
-        st.write(f"**Global SSIM Score:** `{global_score:.4f}`")
-        if tampered_fields:
-            st.error("❌ This PAN card appears to be TAMPERED.")
-            st.markdown("### 🔍 Tampered Fields Detected:")
-            for field, score in tampered_fields:
-                st.write(f"❌ {field} — SSIM: `{score:.4f}`")
+        if detected_fields:
+            st.error("❌ This PAN card is TAMPERED.")
+            st.markdown("### Tampered Fields Detected:")
+            for field in sorted(detected_fields):
+                st.write(f"❌ {field}")
         else:
             st.success("✅ This PAN card appears to be genuine.")
         st.markdown("---")
