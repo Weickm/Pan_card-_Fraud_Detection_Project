@@ -6,8 +6,9 @@ from skimage.metrics import structural_similarity as ssim
 # Preprocess uploaded images
 def preprocess_image(image):
     image = cv2.imdecode(np.frombuffer(image.read(), np.uint8), cv2.IMREAD_GRAYSCALE)
-    image = cv2.equalizeHist(image)  # Normalize lighting
-    image = cv2.resize(image, (400, 250))
+    clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))  # Better contrast
+    image = clahe.apply(image)
+    image = cv2.resize(image, (400, 250))  # Ensure consistent dimensions
     return image
 
 # Compute SSIM difference
@@ -16,7 +17,7 @@ def compare_images(image1, image2):
     diff = (diff * 255).astype("uint8")
     return score, diff
 
-# Highlight tampered areas and extract contours
+# Highlight tampered areas
 def highlight_tampered_sections(reference, test, diff):
     thresh = cv2.adaptiveThreshold(diff, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C,
                                    cv2.THRESH_BINARY_INV, 11, 2)
@@ -35,7 +36,7 @@ def highlight_tampered_sections(reference, test, diff):
 
     return result_image, thresh, tampered_areas
 
-# Define zone mappings for PAN fields (adjusted slightly to better match regions)
+# Regions of interest (adjust as needed)
 regions = {
     "PAN Number": (80, 35, 230, 60),
     "Candidate Name": (35, 75, 200, 100),
@@ -47,7 +48,7 @@ regions = {
     "Reference Number": (260, 215, 390, 250)
 }
 
-# Streamlit app UI
+# Streamlit app
 st.set_page_config(page_title="PAN Card Tampering Detector", layout="centered")
 st.title("🔍 PAN Card Tampering Detection App")
 st.write("Upload the original and suspected PAN card images to detect tampered areas.")
@@ -63,20 +64,26 @@ if reference_file and test_files:
     for test_file in test_files:
         st.subheader(f"Results for: {test_file.name}")
         test_img = preprocess_image(test_file)
+
+        # Full image SSIM and diff
         score, diff = compare_images(ref_img, test_img)
         result_img, thresh_img, tampered_areas = highlight_tampered_sections(ref_img, test_img, diff)
 
-        # Determine tampered zones
+        # Region-wise SSIM evaluation
         detected_sections = set()
-        for (x, y, w, h) in tampered_areas:
-            cx, cy = x + w // 2, y + h // 2
-            for label, (x1, y1, x2, y2) in regions.items():
-                if x1 <= cx <= x2 and y1 <= cy <= y2:
-                    detected_sections.add(f"❌ {label} is tampered.")
+        region_scores = {}
 
-        result = "✅ Valid PAN Card" if score >= threshold and not detected_sections else "❌ Fake PAN Card"
+        for label, (x1, y1, x2, y2) in regions.items():
+            ref_crop = ref_img[y1:y2, x1:x2]
+            test_crop = test_img[y1:y2, x1:x2]
+            field_score, _ = ssim(ref_crop, test_crop, full=True)
+            region_scores[label] = field_score
+            if field_score < threshold:
+                detected_sections.add(f"❌ {label} is tampered.")
 
-        # Display images
+        result = "✅ Valid PAN Card" if not detected_sections else "❌ Fake PAN Card"
+
+        # Show images
         col1, col2 = st.columns(2)
         with col1:
             st.image(ref_img, caption="Original PAN Card", channels="GRAY", use_container_width=True)
@@ -87,12 +94,12 @@ if reference_file and test_files:
         st.image(thresh_img, caption="Thresholded Tampering Image", channels="GRAY", use_container_width=True)
         st.image(result_img, caption="Tampered Area Highlighted", use_container_width=True)
 
-        # Display result and sections
-        st.write(f"*SSIM Score:* {score:.4f}")
+        # Print result
+        st.write(f"*Global SSIM Score:* {score:.4f}")
         st.markdown(f"*Result:* {result}")
 
         if detected_sections:
-            st.markdown("*Tampered Sections Detected:*")
+            st.markdown("### Tampered Sections Detected:")
             for section in sorted(detected_sections):
                 st.write(section)
         else:
