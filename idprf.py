@@ -36,9 +36,9 @@ def highlight_tampered_sections(reference, test, diff):
 
     return result_image, thresh, tampered_areas
 
-# PAN field regions
+# Updated PAN field regions (expanded for better accuracy)
 regions = {
-    "PAN Number": (80, 35, 230, 60),
+    "PAN Number": (80, 35, 260, 65),
     "Candidate Name": (35, 75, 200, 100),
     "Father's/Mother's Name": (35, 110, 200, 135),
     "Date of Birth": (35, 150, 200, 175),
@@ -66,7 +66,7 @@ if reference_file and test_files:
         score, diff = compare_images(ref_img, test_img)
         result_img, thresh_img, tampered_areas = highlight_tampered_sections(ref_img, test_img, diff)
 
-        # Use contour-based region mapping
+        # Detect tampered sections
         detected_sections = set()
         for (x, y, w, h) in tampered_areas:
             cx, cy = x + w // 2, y + h // 2
@@ -76,7 +76,7 @@ if reference_file and test_files:
 
         result = "✅ Valid PAN Card" if not detected_sections else "❌ Fake PAN Card"
 
-        # Show images
+        # Show results
         col1, col2 = st.columns(2)
         with col1:
             st.image(ref_img, caption="Original PAN Card", channels="GRAY", use_container_width=True)
@@ -87,9 +87,8 @@ if reference_file and test_files:
         st.image(thresh_img, caption="Thresholded Tampering Image", channels="GRAY", use_container_width=True)
         st.image(result_img, caption="Tampered Area Highlighted", use_container_width=True)
 
-        # Final output
-        st.write(f"*Global SSIM Score:* {score:.4f}")
-        st.markdown(f"*Result:* {result}")
+        st.markdown(f"***Global SSIM Score:*** `{score:.4f}`")
+        st.markdown(f"**Result:** {result}")
 
         if detected_sections:
             st.markdown("### Tampered Sections Detected:")
